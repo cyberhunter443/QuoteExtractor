@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quote Extractor</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #040c18;
+      --bg-elevated: #071224;
+      --card: #0a1a2e;
+      --card-light: #0d2040;
+      --border: #0e2d4a;
+      --border-glow: #1a4570;
+      --fg: #d6e8f7;
+      --muted: #5a7fa0;
+      --accent: #0098d4;
+      --accent-bright: #00b8ff;
+      --accent-dim: rgba(0, 152, 212, 0.12);
+      --accent-glow: rgba(0, 152, 212, 0.25);
+      --orange: #e87020;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --success: #22c55e;
+      --success-dim: rgba(34, 197, 94, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 0.03em;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Background */
+    .bg-scene {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: radial-gradient(ellipse 60% 40% at 15% 0%, rgba(0, 152, 212, 0.10) 0%, transparent 70%), radial-gradient(ellipse 50% 30% at 85% 100%, rgba(232, 112, 32, 0.07) 0%, transparent 70%), radial-gradient(ellipse 100% 80% at 50% 50%, #040c18 0%, #020810 100%);
+    }
+
+    .grid-lines {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-image: linear-gradient(rgba(0, 152, 212, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 152, 212, 0.06) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black, transparent);
+    }
+
+    .scanline {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 152, 212, 0.015) 2px, rgba(0, 152, 212, 0.015) 4px);
+    }
+
+    /* Header */
+    .header-bar {
+      border-bottom: 1px solid var(--border);
+      background: rgba(4, 12, 24, 0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .app-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), #005a8a);
+      clip-path: polygon(15% 0%, 85% 0%, 100% 15%, 100% 85%, 85% 100%, 15% 100%, 0% 85%, 0% 15%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .app-title {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .version-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      border-radius: 3px;
+    }
+
+    /* Step indicator */
+    .step-line {
+      height: 1px;
+      width: 40px;
+      background: var(--border-glow);
+    }
+
+    .step-num {
+      width: 30px;
+      height: 30px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      transition: all 0.3s ease;
+    }
+
+    .step-num.active {
+      background: var(--accent);
+      border-color: var(--accent-bright);
+      color: #fff;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .step-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+
+    .step-label.active {
+      color: var(--accent-bright);
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 1px solid var(--border-glow);
+      background: linear-gradient(135deg, rgba(0, 152, 212, 0.04), rgba(7, 18, 36, 0.9));
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .drop-zone::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(0, 152, 212, 0.09), rgba(7, 18, 36, 0.95));
+      box-shadow: 0 0 40px rgba(0, 152, 212, 0.1), inset 0 0 40px rgba(0, 152, 212, 0.03);
+      transform: scale(1.005);
+    }
+
+    .drop-zone:hover::before,
+    .drop-zone.dragover::before {
+      opacity: 1;
+    }
+
+    .upload-icon-wrap {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border-glow);
+      clip-path: polygon(12% 0%, 88% 0%, 100% 12%, 100% 88%, 88% 100%, 12% 100%, 0% 88%, 0% 12%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .upload-icon-wrap::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, var(--accent-dim), transparent 70%);
+    }
+
+    /* Cards */
+    .ns-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ns-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-bright), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .ns-card:hover::before {
+      opacity: 0.5;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 20px;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-glow);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .stat-card:hover::after {
+      transform: scaleX(1);
+    }
+
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border-glow), transparent);
+    }
+
+    /* Corner decorators */
+    .corner-tl,
+    .corner-tr,
+    .corner-bl,
+    .corner-br {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: var(--accent-bright);
+      opacity: 0.4;
+    }
+
+    .corner-tl {
+      top: 8px;
+      left: 8px;
+      border-top: 1px solid;
+      border-left: 1px solid;
+    }
+
+    .corner-tr {
+      top: 8px;
+      right: 8px;
+      border-top: 1px solid;
+      border-right: 1px solid;
+    }
+
+    .corner-bl {
+      bottom: 8px;
+      left: 8px;
+      border-bottom: 1px solid;
+      border-left: 1px solid;
+    }
+
+    .corner-br {
+      bottom: 8px;
+      right: 8px;
+      border-bottom: 1px solid;
+      border-right: 1px solid;
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #006fa0);
+      color: #fff;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 11px 28px;
+      border-radius: 3px;
+      border: 1px solid var(--accent);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -60%;
+      width: 40%;
+      height: 200%;
+      background: rgba(255, 255, 255, 0.1);
+      transform: skewX(-20deg);
+      transition: left 0.4s ease;
+    }
+
+    .btn-primary:hover:not(:disabled)::after {
+      left: 130%;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      box-shadow: 0 0 20px var(--accent-glow), 0 4px 16px rgba(0, 0, 0, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--fg);
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 10px 24px;
+      border-radius: 3px;
+      border: 1px solid var(--border-glow);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: var(--card-light);
+      border-color: var(--accent);
+      color: var(--accent-bright);
+    }
+
+    .btn-orange {
+      background: linear-gradient(135deg, var(--orange), #b05010);
+      color: #fff;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 11px 28px;
+      border-radius: 3px;
+      border: 1px solid var(--orange);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-orange:hover {
+      box-shadow: 0 0 20px rgba(232, 112, 32, 0.3);
+      transform: translateY(-1px);
+    }
+
+    /* Table */
+    .data-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .data-table th {
+      background: var(--bg-elevated);
+      color: var(--accent-bright);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 12px 16px;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    .data-table td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+
+    .data-table tbody tr {
+      animation: fadeSlideIn 0.3s ease forwards;
+      opacity: 0;
+    }
+
+    .data-table tbody tr:hover td {
+      background: rgba(0, 152, 212, 0.05);
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* Tabs */
+    .tab-btn {
+      padding: 10px 22px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .tab-btn.active {
+      color: var(--accent-bright);
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    /* Mapping */
+    .mapping-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg-elevated);
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+
+    .mapping-item.mapped {
+      border-color: rgba(34, 197, 94, 0.35);
+      background: rgba(34, 197, 94, 0.04);
+    }
+
+    .mapping-item.unmapped {
+      border-color: rgba(245, 158, 11, 0.35);
+      background: rgba(245, 158, 11, 0.04);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 2px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-success {
+      background: var(--success-dim);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.25);
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+
+    .badge-info {
+      background: var(--accent-dim);
+      color: var(--accent-bright);
+      border: 1px solid rgba(0, 152, 212, 0.25);
+    }
+
+    /* Select / textarea */
+    select {
+      background: var(--bg-elevated);
+      color: var(--fg);
+      border: 1px solid var(--border-glow);
+      border-radius: 3px;
+      padding: 7px 10px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    textarea {
+      background: var(--card);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+
+    /* Sheet buttons */
+    .sheet-btn {
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sheet-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent-bright);
+    }
+
+    .sheet-btn:hover:not(.active) {
+      border-color: var(--border-glow);
+      color: var(--fg);
+    }
+
+    /* Export hex */
+    .success-hex {
+      width: 88px;
+      height: 88px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, rgba(0, 152, 212, 0.15), rgba(0, 152, 212, 0.05));
+      clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px 22px;
+      z-index: 1000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success {
+      border-color: var(--success);
+      box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-slide-up {
+      animation: slideUp 0.5s ease forwards;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="bg-scene"></div>
+  <div class="grid-lines"></div>
+  <div class="scanline"></div>
+
+  <div class="relative z-10 min-h-screen flex flex-col">
+
+    <!-- HEADER -->
+    <header class="header-bar px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="app-icon">
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div class="app-title">Extraction de Devis</div>
+        <div class="w-px h-5 mx-1" style="background:var(--border)"></div>
+        <div class="version-pill">v2.0</div>
+      </div>
+      <div class="text-xs font-mono hidden md:block" style="color:var(--muted)">
+        by <span style="color:var(--accent-bright)">@Cyberhunter</span>
+      </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="flex-1 p-6 md:p-8 lg:p-10 max-w-6xl mx-auto w-full">
+
+      <div class="mb-8 animate-slide-up">
+        <h1 class="text-3xl md:text-4xl font-bold mb-1">Extraction de Devis</h1>
+        <p class="text-sm font-mono" style="color:var(--muted)">by <span style="color:var(--accent-bright)">@Cyberhunter</span></p>
+      </div>
+
+      <!-- Step Indicator -->
+      <div class="flex items-center gap-1 mb-10 overflow-x-auto pb-2" id="stepIndicator">
+        <div class="step-item flex items-center gap-2" data-step="1">
+          <div class="step-num active" data-num="1">1</div>
+          <span class="step-label active whitespace-nowrap">Import</span>
+        </div>
+        <div class="step-line mx-1"></div>
+        <div class="step-item flex items-center gap-2" data-step="2">
+          <div class="step-num" data-num="2">2</div>
+          <span class="step-label whitespace-nowrap">Détection</span>
+        </div>
+        <div class="step-line mx-1"></div>
+        <div class="step-item flex items-center gap-2" data-step="3">
+          <div class="step-num" data-num="3">3</div>
+          <span class="step-label whitespace-nowrap">Extraction</span>
+        </div>
+        <div class="step-line mx-1"></div>
+        <div class="step-item flex items-center gap-2" data-step="4">
+          <div class="step-num" data-num="4">4</div>
+          <span class="step-label whitespace-nowrap">Export</span>
+        </div>
+      </div>
+
+      <!-- STEP 1 -->
+      <section id="step1" class="step-content animate-slide-up">
+        <div class="drop-zone rounded-sm p-12 text-center cursor-pointer relative" id="dropZone">
+          <div class="corner-tl"></div>
+          <div class="corner-tr"></div>
+          <div class="corner-bl"></div>
+          <div class="corner-br"></div>
+          <input type="file" id="fileInput" accept=".csv,.txt,.tsv,.xlsx,.xls" class="hidden">
+          <div class="mb-6">
+            <div class="upload-icon-wrap mb-5">
+              <svg class="w-9 h-9 relative z-10" style="color:var(--accent-bright)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <h3 class="text-2xl font-bold mb-2">Déposez votre fichier</h3>
+            <p class="text-sm" style="color:var(--muted)">Excel ou CSV — glissez ici ou cliquez pour sélectionner</p>
+          </div>
+          <div class="flex items-center justify-center gap-3 flex-wrap">
+            <span class="badge badge-warning">.xlsx</span>
+            <span class="badge badge-warning">.xls</span>
+            <span class="badge badge-warning">.csv</span>
+          </div>
+        </div>
+        <div class="mt-8">
+          <div class="section-label">Ou collez vos données CSV</div>
+          <textarea id="pasteArea" class="w-full h-44 p-4 text-sm font-mono resize-none" placeholder="Collez vos données ici..."></textarea>
+          <div class="flex justify-end mt-3">
+            <button id="parsePaste" class="btn-primary" disabled>Analyser</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2 -->
+      <section id="step2" class="step-content hidden">
+        <div class="ns-card p-4 mb-5 flex items-center gap-4">
+          <div class="w-9 h-9 rounded-sm flex items-center justify-center" style="background:var(--accent-dim);color:var(--accent-bright)">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="font-semibold text-sm" id="fileName">fichier.xlsx</div>
+            <div class="text-xs font-mono" style="color:var(--muted)" id="fileStats">0 lignes</div>
+          </div>
+        </div>
+        <div class="sheet-selector flex gap-2 mb-5 hidden flex-wrap" id="sheetSelector"></div>
+        <div class="ns-card p-6 mb-6">
+          <div class="section-label">Détection automatique</div>
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="rounded-sm p-4" style="background:var(--bg-elevated);border:1px solid var(--border)">
+              <div class="text-xs font-mono uppercase tracking-widest mb-1" style="color:var(--muted)">Ligne d'en-tête</div>
+              <div class="text-3xl font-bold" style="font-family:'Rajdhani',sans-serif;color:var(--accent-bright)" id="detectedHeaderRow">—</div>
+            </div>
+            <div class="rounded-sm p-4" style="background:var(--bg-elevated);border:1px solid var(--border)">
+              <div class="text-xs font-mono uppercase tracking-widest mb-1" style="color:var(--muted)">Lignes de données</div>
+              <div class="text-3xl font-bold" style="font-family:'Rajdhani',sans-serif;color:var(--accent-bright)" id="dataRowCount">—</div>
+            </div>
+          </div>
+          <div class="section-label">Mapping des colonnes</div>
+          <div class="space-y-3" id="columnMapping"></div>
+        </div>
+        <div class="flex justify-between">
+          <button class="btn-secondary" onclick="goToStep(1)">← Retour</button>
+          <button class="btn-primary" id="extractBtn" onclick="extractData()" disabled>Extraire →</button>
+        </div>
+      </section>
+
+      <!-- STEP 3 -->
+      <section id="step3" class="step-content hidden">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="stat-card">
+            <div class="text-xs font-mono uppercase tracking-widest mb-2" style="color:var(--muted)">Extraites</div>
+            <div class="text-3xl font-bold" style="font-family:'Rajdhani',sans-serif;color:var(--accent-bright)" id="statExtracted">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="text-xs font-mono uppercase tracking-widest mb-2" style="color:var(--muted)">Ignorées</div>
+            <div class="text-3xl font-bold" style="font-family:'Rajdhani',sans-serif;color:var(--warning)" id="statSkipped">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="text-xs font-mono uppercase tracking-widest mb-2" style="color:var(--muted)">Prix corrigés</div>
+            <div class="text-3xl font-bold" style="font-family:'Rajdhani',sans-serif;color:var(--success)" id="statPrices">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="text-xs font-mono uppercase tracking-widest mb-2" style="color:var(--muted)">Total</div>
+            <div class="text-2xl font-bold font-mono" style="color:var(--orange)" id="statTotal">$0.00</div>
+          </div>
+        </div>
+        <div class="ns-card overflow-hidden mb-6">
+          <div class="flex border-b" style="border-color:var(--border)">
+            <button class="tab-btn active" data-tab="result">Résultat</button>
+            <button class="tab-btn" data-tab="source">Source</button>
+          </div>
+          <div id="tabResult" class="tab-content max-h-96 overflow-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Mfr. Part #</th>
+                  <th>Qty</th>
+                  <th>Description</th>
+                  <th>Cost ($)</th>
+                </tr>
+              </thead>
+              <tbody id="resultBody"></tbody>
+            </table>
+          </div>
+          <div id="tabSource" class="tab-content hidden max-h-96 overflow-auto">
+            <table class="data-table">
+              <thead id="sourceHead"></thead>
+              <tbody id="sourceBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="flex justify-between">
+          <button class="btn-secondary" onclick="goToStep(2)">← Retour</button>
+          <button class="btn-primary" onclick="goToStep(4)">Exporter →</button>
+        </div>
+      </section>
+
+      <!-- STEP 4 -->
+      <section id="step4" class="step-content hidden">
+        <div class="ns-card p-10 text-center relative">
+          <div class="corner-tl"></div>
+          <div class="corner-tr"></div>
+          <div class="corner-bl"></div>
+          <div class="corner-br"></div>
+          <div class="success-hex mb-6">
+            <svg class="w-10 h-10" style="color:var(--accent-bright)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold mb-1">Export prêt</h3>
+          <p class="text-sm mb-8" style="color:var(--muted)">Téléchargez votre devis normalisé</p>
+          <div class="flex flex-col sm:flex-row gap-4 justify-center mb-5">
+            <button class="btn-primary" onclick="downloadCSV()">↓ Télécharger CSV</button>
+            <button class="btn-secondary" onclick="downloadExcel()">↓ Télécharger Excel</button>
+          </div>
+          <button class="btn-secondary text-sm" onclick="copyToClipboard()">⎘ Copier dans le presse-papier</button>
+        </div>
+        <div class="flex justify-center mt-6">
+          <button class="btn-secondary" onclick="resetTool()">↺ Recommencer</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <div class="toast" id="toast"><span id="toastMessage"></span></div>
+
+  <script>
+    // ─── STATE ────────────────────────────────────────────────────────────────
+    let rawData = [];
+    let headers = [];
+    let headerRowIndex = -1;
+    let workbook = null;
+    let sheetNames = [];
+    let currentSheetIndex = 0;
+    let currentFileName = '';
+    let extractedData = [];
+    let columnMapping = {
+      sku: -1,
+      mfr: -1,
+      qty: -1,
+      desc: -1,
+      cost: -1
+    };
+    // ─── COLUMN DEFINITIONS ───────────────────────────────────────────────────
+    // Cost: extended prices first (correct for multi-qty Ingram files).
+    // columnHasData() below skips any candidate whose column is empty in the
+    // actual data rows, so Reseller Price wins for TD SYNNEX automatically.
+    const columnDefinitions = {
+      cost: ["EXTENDED RESELLER PRICE", "Ext. Price", "Ext Price", "Reseller Price", "Cost", "Total", "Unit Price", "Price"],
+      sku: ["PRODUCT NUMBER", "SKU#", "SKU", "Item #"],
+      mfr: ["MFG Part#", "Mfr. Part #", "MFR", "Product Description", "Manufacturer Part #"],
+      qty: ["Qty", "Quantity"],
+      desc: ["DESCRIPTION", "SUPPORT PACKAGE DESCRIPTION", "Description", "Support Package Description"]
+    };
+    // ─── DOM ──────────────────────────────────────────────────────────────────
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const pasteArea = document.getElementById('pasteArea');
+    const parsePasteBtn = document.getElementById('parsePaste');
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) processFile(e.target.files[0]);
+    });
+    pasteArea.addEventListener('input', () => {
+      parsePasteBtn.disabled = !pasteArea.value.trim();
+    });
+    parsePasteBtn.addEventListener('click', () => {
+      currentFileName = 'pasted_data.txt';
+      parseTextData(pasteArea.value);
+    });
+    // ─── FILE PROCESSING ──────────────────────────────────────────────────────
+    function processFile(file) {
+      currentFileName = file.name;
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === 'xlsx' || ext === 'xls') {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            workbook = XLSX.read(new Uint8Array(e.target.result), {
+              type: 'array'
+            });
+            sheetNames = workbook.SheetNames;
+            loadSheetData(0);
+            goToStep(2);
+          } catch (err) {
+            showToast('Erreur lecture fichier Excel');
+            console.error(err);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        workbook = null;
+        sheetNames = [];
+        const reader = new FileReader();
+        reader.onload = e => parseTextData(e.target.result);
+        reader.readAsText(file);
+      }
+    }
+
+    function loadSheetData(index) {
+      if (!workbook) return;
+      currentSheetIndex = index;
+      const sheet = workbook.Sheets[sheetNames[index]];
+      // Fix wrong declared dimension in some xlsx files (e.g. TD SYNNEX declares A1:U24 but data goes to row 54+)
+      // SheetJS trusts !ref and stops early - recalculate from actual cell keys
+      const cellKeys = Object.keys(sheet).filter(k => !k.startsWith("!"));
+      if (cellKeys.length > 0) {
+        const decoded = cellKeys.map(k => XLSX.utils.decode_cell(k));
+        const maxR = Math.max(...decoded.map(c => c.r));
+        const maxC = Math.max(...decoded.map(c => c.c));
+        sheet["!ref"] = XLSX.utils.encode_range({
+          s: {
+            r: 0,
+            c: 0
+          },
+          e: {
+            r: maxR,
+            c: maxC
+          }
+        });
+      }
+      rawData = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: ""
+      });
+      renderSheetSelector();
+      findHeaderRow();
+      updateUIStep2();
+    }
+
+    function parseTextData(text) {
+      const lines = text.split('\n').filter(l => l.trim());
+      rawData = lines.map(l => parseCSVLine(l, detectDelimiter(lines[0])));
+      findHeaderRow();
+      goToStep(2);
+    }
+
+    function parseCSVLine(line, delim) {
+      const result = [];
+      let cur = '';
+      let inQ = false;
+      for (const ch of line) {
+        if (ch === '"') inQ = !inQ;
+        else if (ch === delim && !inQ) {
+          result.push(cur.trim());
+          cur = '';
+        } else cur += ch;
+      }
+      result.push(cur.trim());
+      return result;
+    }
+
+    function detectDelimiter(line) {
+      return [',', ';', '\t'].reduce((best, d) =>
+        (line.match(new RegExp(d === '\t' ? '\\t' : d, 'g')) || []).length >
+        (line.match(new RegExp(best === '\t' ? '\\t' : best, 'g')) || []).length ? d : best, ',');
+    }
+    // ─── HEADER DETECTION ─────────────────────────────────────────────────────
+    function findHeaderRow() {
+      const keywords = Object.values(columnDefinitions).flat().map(k => k.toLowerCase());
+      let bestIdx = 0,
+        bestCount = 0;
+      for (let i = 0; i < Math.min(30, rawData.length); i++) {
+        const count = rawData[i].filter(c => keywords.includes(String(c).trim().toLowerCase())).length;
+        if (count > bestCount) {
+          bestCount = count;
+          bestIdx = i;
+        }
+      }
+      headerRowIndex = bestCount > 0 ? bestIdx : 0;
+      headers = rawData[headerRowIndex];
+      autoMapColumns();
+    }
+    // ─── COLUMN MAPPING ───────────────────────────────────────────────────────
+    // Checks whether a given column index actually contains non-zero data
+    // in the first ~9 data rows after the header.
+    function columnHasData(colIdx) {
+      const emptyValues = new Set(['', '0', '0.00', '-', 'na', 'n/a', 'none', 'null']);
+      return rawData
+        .slice(headerRowIndex + 1, headerRowIndex + 10)
+        .some(row => {
+          const v = String(row[colIdx] ?? '').trim().toLowerCase();
+          return v !== '' && !emptyValues.has(v);
+        });
+    }
+    // ── KEY FIX 2 ─────────────────────────────────────────────────────────────
+    // Two-pass column finder:
+    //   Pass 1 – name match AND column has real data  → use it
+    //   Pass 2 – name match only (fallback)           → use it (user can override manually)
+    // This means "Ext. Price" is skipped when the column exists in the header
+    // but all its cells are empty (as happens in some TD SYNNEX formats),
+    // and the next candidate "Reseller Price" is used instead.
+    function findColWithData(names) {
+      for (const name of names) {
+        const idx = headers.findIndex(h => String(h).trim().toLowerCase() === name.toLowerCase());
+        if (idx !== -1 && columnHasData(idx)) return idx;
+      }
+      for (const name of names) {
+        const idx = headers.findIndex(h => String(h).trim().toLowerCase() === name.toLowerCase());
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    }
+
+    function autoMapColumns() {
+      columnMapping = {
+        cost: findColWithData(columnDefinitions.cost),
+        sku: findColWithData(columnDefinitions.sku),
+        mfr: findColWithData(columnDefinitions.mfr),
+        qty: findColWithData(columnDefinitions.qty),
+        desc: findColWithData(columnDefinitions.desc),
+      };
+    }
+    // ─── EXTRACTION ───────────────────────────────────────────────────────────
+    function extractData() {
+      extractedData = [];
+      let skipped = 0,
+        pricesNorm = 0,
+        total = 0;
+      for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+        const row = rawData[i];
+        const sku = columnMapping.sku !== -1 ? String(row[columnMapping.sku] ?? '').trim() : '';
+        if (!sku) {
+          skipped++;
+          continue;
+        }
+        const firstCell = String(row[0] ?? '').toLowerCase().trim();
+        if (firstCell.includes('total') || firstCell.includes('pricing')) {
+          skipped++;
+          continue;
+        }
+        const mfr = columnMapping.mfr !== -1 ? String(row[columnMapping.mfr] ?? '').trim() : '';
+        const qty = columnMapping.qty !== -1 ? String(row[columnMapping.qty] ?? '').trim() : '';
+        const desc = columnMapping.desc !== -1 ? String(row[columnMapping.desc] ?? '').trim() : '';
+        const rawCost = columnMapping.cost !== -1 ? String(row[columnMapping.cost] ?? '').trim() : '0';
+        const price = normalizePrice(rawCost);
+        if (price.normalized) pricesNorm++;
+        total += price.numeric;
+        extractedData.push({
+          sku,
+          mfr,
+          qty,
+          desc,
+          cost: price.value
+        });
+      }
+      document.getElementById('statExtracted').textContent = extractedData.length;
+      document.getElementById('statSkipped').textContent = skipped;
+      document.getElementById('statPrices').textContent = pricesNorm;
+      document.getElementById('statTotal').textContent = '$' + total.toFixed(2);
+      renderResultTable();
+      renderSourceTable();
+      goToStep(3);
+    }
+
+    function normalizePrice(raw) {
+      raw = raw.replace(/\$/g, '').replace(/\s/g, '').replace(/"/g, '');
+      if (!raw || raw === '-') return {
+        value: '0.00',
+        numeric: 0,
+        normalized: false
+      };
+      const lDot = raw.lastIndexOf('.'),
+        lComma = raw.lastIndexOf(',');
+      if (lComma > lDot) raw = raw.replace(/\./g, '').replace(',', '.'); // EU: 1.000,00
+      else raw = raw.replace(/,/g, ''); // US: 1,000.00
+      if (!raw.includes('.')) raw += '.00';
+      const num = parseFloat(raw) || 0;
+      return {
+        value: num.toFixed(2),
+        numeric: num,
+        normalized: true
+      };
+    }
+    // ─── UI ───────────────────────────────────────────────────────────────────
+    function updateUIStep2() {
+      document.getElementById('fileName').textContent = currentFileName;
+      document.getElementById('fileStats').textContent = sheetNames.length > 1 ?
+        `${sheetNames.length} feuilles — ${rawData.length} lignes` :
+        `${rawData.length} lignes`;
+      document.getElementById('detectedHeaderRow').textContent = `Ligne ${headerRowIndex + 1}`;
+      document.getElementById('dataRowCount').textContent = Math.max(0, rawData.length - headerRowIndex - 1);
+      const container = document.getElementById('columnMapping');
+      container.innerHTML = '';
+      const fields = [{
+          key: 'sku',
+          label: 'SKU / Product Number',
+          req: true
+        },
+        {
+          key: 'cost',
+          label: 'Cost / Price',
+          req: true
+        },
+        {
+          key: 'mfr',
+          label: 'Mfr. Part #',
+          req: false
+        },
+        {
+          key: 'qty',
+          label: 'Quantity',
+          req: false
+        },
+        {
+          key: 'desc',
+          label: 'Description',
+          req: false
+        },
+      ];
+      fields.forEach(f => {
+        const idx = columnMapping[f.key],
+          isMapped = idx !== -1;
+        const div = document.createElement('div');
+        div.className = `mapping-item ${isMapped ? 'mapped' : 'unmapped'}`;
+        div.innerHTML = `
+          <div class="flex-1">
+            <span class="font-medium">${f.label}</span>
+            ${f.req ? '<span class="text-xs ml-1" style="color:var(--error)">*Requis</span>' : ''}
+            ${isMapped ? `<span class="text-xs ml-2" style="color:var(--muted)">${String(headers[idx]).substring(0,25)}</span>` : ''}
+          </div>
+          <select onchange="updateMap('${f.key}', this.value)" class="w-48">
+            <option value="-1">-- Non detecte --</option>
+            ${headers.map((h,i) => `<option value="${i}" ${idx===i?'selected':''}>${i}: ${String(h).substring(0,20)}</option>`).join('')}
+          </select>
+          <span class="badge ${isMapped ? 'badge-success' : 'badge-warning'}">${isMapped ? 'OK' : 'Manuel'}</span>
+        `;
+        container.appendChild(div);
+      });
+      document.getElementById('extractBtn').disabled = (columnMapping.sku === -1 || columnMapping.cost === -1);
+    }
+
+    function renderSheetSelector() {
+      const container = document.getElementById('sheetSelector');
+      if (sheetNames.length > 1) {
+        container.classList.remove('hidden');
+        container.innerHTML = sheetNames.map((name, i) =>
+          `<button class="sheet-btn ${i===currentSheetIndex?'active':''}" onclick="loadSheetData(${i})">${name}</button>`
+        ).join('');
+      } else {
+        container.classList.add('hidden');
+      }
+    }
+
+    function updateMap(key, val) {
+      columnMapping[key] = parseInt(val);
+      updateUIStep2();
+    }
+
+    function renderResultTable() {
+      document.getElementById('resultBody').innerHTML = extractedData.map((r, i) => `
+        <tr style="animation-delay:${i*20}ms">
+          <td class="font-mono" style="color:var(--accent)">${r.sku}</td>
+          <td class="font-mono">${r.mfr}</td>
+          <td class="font-mono">${r.qty}</td>
+          <td class="truncate max-w-xs">${r.desc}</td>
+          <td class="font-mono text-right">${r.cost}</td>
+        </tr>`).join('');
+    }
+
+    function renderSourceTable() {
+      document.getElementById('sourceHead').innerHTML = `<tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+      let html = '';
+      for (let i = headerRowIndex + 1; i < Math.min(headerRowIndex + 20, rawData.length); i++)
+        html += `<tr>${rawData[i].map(c=>`<td>${c}</td>`).join('')}</tr>`;
+      document.getElementById('sourceBody').innerHTML = html;
+    }
+    // ─── NAVIGATION ───────────────────────────────────────────────────────────
+    function goToStep(step) {
+      document.querySelectorAll('.step-content').forEach(s => s.classList.add('hidden'));
+      document.getElementById(`step${step}`).classList.remove('hidden');
+      document.querySelectorAll('.step-item').forEach(item => {
+        const active = parseInt(item.dataset.step) <= step;
+        const circle = item.querySelector('span:first-child');
+        item.classList.toggle('text-[var(--muted)]', !active);
+        item.classList.toggle('text-[var(--accent)]', active);
+        circle.classList.toggle('bg-[var(--card)]', !active);
+        circle.classList.toggle('border', !active);
+        circle.classList.toggle('bg-[var(--accent)]', active);
+        circle.classList.toggle('text-[var(--bg)]', active);
+      });
+    }
+    // ─── EXPORT ───────────────────────────────────────────────────────────────
+    function downloadCSV() {
+      const rows = extractedData.map(r => `"${r.sku}","${r.mfr}","${r.qty}","${r.desc}",${r.cost}`);
+      downloadFile('SKU,Mfr. Part #,Qty,Description,Cost ($)\n' + rows.join('\n'), 'quote.csv', 'text/csv');
+      showToast('CSV téléchargé !');
+    }
+    // ── PURE JS ZIP BUILDER (no CDN needed) ─────────────────────────────────
+    // Builds a valid .xlsx (which is just a ZIP of XML files) with zero dependencies.
+    function u8(str) {
+      return new TextEncoder().encode(str);
+    }
+
+    function crc32(buf) {
+      let c = 0xFFFFFFFF;
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let v = i;
+        for (let j = 0; j < 8; j++) v = (v & 1) ? (0xEDB88320 ^ (v >>> 1)) : (v >>> 1);
+        t[i] = v;
+      }
+      for (let i = 0; i < buf.length; i++) c = t[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function buildZip(files) {
+      // files: [{name, data: Uint8Array}]
+      const enc = (n, b) => {
+        const a = new Uint8Array(b);
+        a[0] = n & 0xff;
+        a[1] = (n >> 8) & 0xff;
+        return a;
+      };
+      const enc4 = n => {
+        const a = new Uint8Array(4);
+        new DataView(a.buffer).setUint32(0, n, true);
+        return a;
+      };
+      const enc2 = n => {
+        const a = new Uint8Array(2);
+        new DataView(a.buffer).setUint16(0, n, true);
+        return a;
+      };
+      const cat = (...parts) => {
+        const len = parts.reduce((s, p) => s + p.length, 0);
+        const r = new Uint8Array(len);
+        let o = 0;
+        parts.forEach(p => {
+          r.set(p, o);
+          o += p.length;
+        });
+        return r;
+      };
+      const locals = [],
+        centrals = [];
+      let offset = 0;
+      files.forEach(({
+        name,
+        data
+      }) => {
+        const nm = u8(name);
+        const crc = crc32(data);
+        const local = cat(
+          new Uint8Array([0x50, 0x4B, 0x03, 0x04]), // local file header sig
+          enc2(20), enc2(0), enc2(0), // version, flags, compression (stored)
+          enc2(0), enc2(0), // mod time, mod date
+          enc4(crc), // crc32
+          enc4(data.length), enc4(data.length), // compressed, uncompressed size
+          enc2(nm.length), enc2(0), // filename len, extra len
+          nm, data
+        );
+        const central = cat(
+          new Uint8Array([0x50, 0x4B, 0x01, 0x02]), // central dir sig
+          enc2(20), enc2(20), enc2(0), enc2(0), // version_made, version_needed, flags, compression
+          enc2(0), enc2(0), // mod time, date
+          enc4(crc),
+          enc4(data.length), enc4(data.length),
+          enc2(nm.length), enc2(0), enc2(0), // name len, extra, comment
+          enc2(0), enc2(0), // disk start, int attr
+          enc4(0), enc4(offset), // ext attr, local offset
+          nm
+        );
+        locals.push(local);
+        centrals.push(central);
+        offset += local.length;
+      });
+      const centralData = cat(...centrals);
+      const eocd = cat(
+        new Uint8Array([0x50, 0x4B, 0x05, 0x06]), // end of central dir sig
+        enc2(0), enc2(0), // disk numbers
+        enc2(files.length), enc2(files.length), // entry counts
+        enc4(centralData.length), enc4(offset), // central dir size & offset
+        enc2(0) // comment length
+      );
+      return cat(...locals, centralData, eocd);
+    }
+
+    function escXml(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function downloadExcel() {
+      try {
+        const filteredRows = extractedData.filter(r =>
+          !((!r.sku || r.sku === "") && parseFloat(r.cost || 0) === 0)
+        );
+        const dataRows = [
+          ["SKU", "Mfr. Part #", "Qty", "Description", "Cost ($)"],
+          ...filteredRows.map(r => [r.sku, r.mfr, r.qty, r.desc, r.cost])
+        ];
+        // Shared strings table
+        const strings = [],
+          strMap = {};
+        const si = v => {
+          const k = String(v ?? '');
+          if (strMap[k] === undefined) {
+            strMap[k] = strings.length;
+            strings.push(k);
+          }
+          return strMap[k];
+        };
+        const COLS = ["A", "B", "C", "D", "E"];
+        let sheetRows = '';
+        dataRows.forEach((row, ri) => {
+          const s = ri === 0 ? '1' : '2'; // style 1=header, 2=data
+          let cells = '';
+          row.forEach((val, ci) => {
+            cells += `<c r="${COLS[ci]}${ri+1}" t="s" s="${s}"><v>${si(val)}</v></c>`;
+          });
+          sheetRows += `<row r="${ri+1}">${cells}</row>`;
+        });
+        const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="15" customWidth="1"/><col min="2" max="2" width="25" customWidth="1"/><col min="3" max="3" width="8" customWidth="1"/><col min="4" max="4" width="55" customWidth="1"/><col min="5" max="5" width="14" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData></worksheet>`;
+        const ssXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strings.length}" uniqueCount="${strings.length}">${strings.map(s=>`<si><t xml:space="preserve">${escXml(s)}</t></si>`).join('')}</sst>`;
+        const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+        const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+        const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+        const wbXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Quote" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+        const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+        const zip = buildZip([{
+            name: "[Content_Types].xml",
+            data: u8(contentTypes)
+          },
+          {
+            name: "_rels/.rels",
+            data: u8(rels)
+          },
+          {
+            name: "xl/workbook.xml",
+            data: u8(wbXml)
+          },
+          {
+            name: "xl/_rels/workbook.xml.rels",
+            data: u8(wbRels)
+          },
+          {
+            name: "xl/worksheets/sheet1.xml",
+            data: u8(sheetXml)
+          },
+          {
+            name: "xl/sharedStrings.xml",
+            data: u8(ssXml)
+          },
+          {
+            name: "xl/styles.xml",
+            data: u8(stylesXml)
+          },
+        ]);
+        const blob = new Blob([zip], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+        const a = Object.assign(document.createElement("a"), {
+          href: URL.createObjectURL(blob),
+          download: "quote.xlsx"
+        });
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast('Excel téléchargé !');
+      } catch (e) {
+        alert('Excel export error: ' + e.message);
+        console.error(e);
+      }
+    }
+
+    function downloadFile(data, name, type) {
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(new Blob([data], {
+          type
+        })),
+        download: name
+      });
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    async function copyToClipboard() {
+      const rows = extractedData.map(r => `${r.sku}\t${r.mfr}\t${r.qty}\t${r.desc}\t${r.cost}`);
+      await navigator.clipboard.writeText('SKU\tMfr. Part #\tQty\tDescription\tCost ($)\n' + rows.join('\n'));
+      showToast('Copie dans le presse-papier !');
+    }
+
+    function resetTool() {
+      rawData = [];
+      headers = [];
+      workbook = null;
+      sheetNames = [];
+      extractedData = [];
+      pasteArea.value = '';
+      fileInput.value = '';
+      goToStep(1);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = msg;
+      t.classList.add('show', 'success');
+      setTimeout(() => t.classList.remove('show', 'success'), 3000);
+    }
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tabResult').classList.toggle('hidden', btn.dataset.tab !== 'result');
+      document.getElementById('tabSource').classList.toggle('hidden', btn.dataset.tab !== 'source');
+    }));
+  </script>
+</body>
+
+</html>
