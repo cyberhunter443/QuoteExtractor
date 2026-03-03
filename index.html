@@ -455,6 +455,10 @@
     .data-table tbody tr:hover td {
       background: rgba(0, 152, 212, 0.05);
     }
+    
+    .data-table tbody tr.selected td {
+      background: rgba(239, 68, 68, 0.08);
+    }
 
     @keyframes fadeSlideIn {
       from {
@@ -646,6 +650,78 @@
       box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
     }
 
+    /* Selection Controls (Added) */
+    .checkbox-custom {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--border-glow);
+      border-radius: 3px;
+      background: var(--bg-elevated);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .checkbox-custom:hover {
+      border-color: var(--accent);
+    }
+
+    .checkbox-custom.checked {
+      background: var(--accent);
+      border-color: var(--accent-bright);
+    }
+
+    .checkbox-custom.checked svg {
+      display: block;
+    }
+
+    .checkbox-custom svg {
+      display: none;
+      width: 12px;
+      height: 12px;
+      color: #fff;
+    }
+    
+    .selection-bar {
+      background: rgba(7, 18, 36, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 1rem;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, var(--error), #b91c1c);
+      color: #fff;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 8px 18px;
+      border-radius: 3px;
+      border: 1px solid var(--error);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+
     @keyframes slideUp {
       from {
         opacity: 0;
@@ -816,6 +892,32 @@
             <div class="text-2xl font-bold font-mono" style="color:var(--orange)" id="statTotal">$0.00</div>
           </div>
         </div>
+
+        <!-- Selection Bar (Added) -->
+        <div class="selection-bar" id="selectionBar">
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <div class="checkbox-custom" id="selectAllCheckbox" onclick="toggleSelectAll()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <span class="text-sm font-medium">Tout sélectionner</span>
+            </label>
+            <div class="text-sm font-mono" style="color:var(--muted)">
+              <span id="selectedCount">0</span> ligne(s) sélectionnée(s)
+            </div>
+          </div>
+          <button class="btn-danger" id="deleteSelectedBtn" onclick="deleteSelectedRows()" disabled>
+            <span class="flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Supprimer
+            </span>
+          </button>
+        </div>
+
         <div class="ns-card overflow-hidden mb-6">
           <div class="flex border-b" style="border-color:var(--border)">
             <button class="tab-btn active" data-tab="result">Résultat</button>
@@ -825,11 +927,13 @@
             <table class="data-table">
               <thead>
                 <tr>
+                  <th style="width:40px"></th> <!-- Checkbox Col -->
                   <th>SKU</th>
                   <th>Mfr. Part #</th>
                   <th>Qty</th>
                   <th>Description</th>
                   <th>Cost ($)</th>
+                  <th style="width:50px"></th> <!-- Action Col -->
                 </tr>
               </thead>
               <tbody id="resultBody"></tbody>
@@ -887,6 +991,7 @@
     let currentSheetIndex = 0;
     let currentFileName = '';
     let extractedData = [];
+    let selectedRows = new Set(); // Added for selection
     let columnMapping = {
       sku: -1,
       mfr: -1,
@@ -895,9 +1000,6 @@
       cost: -1
     };
     // ─── COLUMN DEFINITIONS ───────────────────────────────────────────────────
-    // Cost: extended prices first (correct for multi-qty Ingram files).
-    // columnHasData() below skips any candidate whose column is empty in the
-    // actual data rows, so Reseller Price wins for TD SYNNEX automatically.
     const columnDefinitions = {
       cost: ["EXTENDED RESELLER PRICE", "Ext. Price", "Ext Price", "Reseller Price", "Cost", "Total", "Unit Price", "Price"],
       sku: ["PRODUCT NUMBER", "SKU#", "SKU", "Item #"],
@@ -964,8 +1066,6 @@
       if (!workbook) return;
       currentSheetIndex = index;
       const sheet = workbook.Sheets[sheetNames[index]];
-      // Fix wrong declared dimension in some xlsx files (e.g. TD SYNNEX declares A1:U24 but data goes to row 54+)
-      // SheetJS trusts !ref and stops early - recalculate from actual cell keys
       const cellKeys = Object.keys(sheet).filter(k => !k.startsWith("!"));
       if (cellKeys.length > 0) {
         const decoded = cellKeys.map(k => XLSX.utils.decode_cell(k));
@@ -1035,8 +1135,6 @@
       autoMapColumns();
     }
     // ─── COLUMN MAPPING ───────────────────────────────────────────────────────
-    // Checks whether a given column index actually contains non-zero data
-    // in the first ~9 data rows after the header.
     function columnHasData(colIdx) {
       const emptyValues = new Set(['', '0', '0.00', '-', 'na', 'n/a', 'none', 'null']);
       return rawData
@@ -1046,13 +1144,7 @@
           return v !== '' && !emptyValues.has(v);
         });
     }
-    // ── KEY FIX 2 ─────────────────────────────────────────────────────────────
-    // Two-pass column finder:
-    //   Pass 1 – name match AND column has real data  → use it
-    //   Pass 2 – name match only (fallback)           → use it (user can override manually)
-    // This means "Ext. Price" is skipped when the column exists in the header
-    // but all its cells are empty (as happens in some TD SYNNEX formats),
-    // and the next candidate "Reseller Price" is used instead.
+
     function findColWithData(names) {
       for (const name of names) {
         const idx = headers.findIndex(h => String(h).trim().toLowerCase() === name.toLowerCase());
@@ -1077,6 +1169,7 @@
     // ─── EXTRACTION ───────────────────────────────────────────────────────────
     function extractData() {
       extractedData = [];
+      selectedRows.clear(); // Clear selection on new extraction
       let skipped = 0,
         pricesNorm = 0,
         total = 0;
@@ -1113,6 +1206,7 @@
       document.getElementById('statTotal').textContent = '$' + total.toFixed(2);
       renderResultTable();
       renderSourceTable();
+      updateSelectionUI(); // Init UI
       goToStep(3);
     }
 
@@ -1135,6 +1229,79 @@
         normalized: true
       };
     }
+    
+    // ─── SELECTION & DELETION (Added) ───────────────────────────────────────
+    function toggleRowSelection(index) {
+      if (selectedRows.has(index)) selectedRows.delete(index);
+      else selectedRows.add(index);
+      updateSelectionUI();
+    }
+
+    function toggleSelectAll() {
+      if (selectedRows.size === extractedData.length) selectedRows.clear();
+      else extractedData.forEach((_, i) => selectedRows.add(i));
+      updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      const deleteBtn = document.getElementById('deleteSelectedBtn');
+      const selectedCount = document.getElementById('selectedCount');
+
+      selectedCount.textContent = selectedRows.size;
+      deleteBtn.disabled = selectedRows.size === 0;
+
+      if (selectedRows.size === extractedData.length && extractedData.length > 0) {
+        selectAllCheckbox.classList.add('checked');
+      } else {
+        selectAllCheckbox.classList.remove('checked');
+      }
+
+      // Update rows
+      document.querySelectorAll('#resultBody tr').forEach((tr, i) => {
+        const cb = tr.querySelector('.checkbox-custom');
+        if (selectedRows.has(i)) {
+          tr.classList.add('selected');
+          if(cb) cb.classList.add('checked');
+        } else {
+          tr.classList.remove('selected');
+          if(cb) cb.classList.remove('checked');
+        }
+      });
+    }
+
+    function deleteSingleRow(index) {
+      extractedData.splice(index, 1);
+      selectedRows.clear();
+      recalculateStats();
+      renderResultTable();
+      updateSelectionUI();
+      showToast('Ligne supprimée');
+    }
+
+    function deleteSelectedRows() {
+      if (selectedRows.size === 0) return;
+      const indices = Array.from(selectedRows).sort((a, b) => b - a); // Descending
+      indices.forEach(i => extractedData.splice(i, 1));
+      selectedRows.clear();
+      recalculateStats();
+      renderResultTable();
+      updateSelectionUI();
+      showToast(indices.length + ' ligne(s) supprimée(s)');
+    }
+
+    function recalculateStats() {
+      let pricesNorm = 0, total = 0;
+      extractedData.forEach(r => {
+        const num = parseFloat(r.cost) || 0;
+        if (num > 0) pricesNorm++;
+        total += num;
+      });
+      document.getElementById('statExtracted').textContent = extractedData.length;
+      document.getElementById('statPrices').textContent = pricesNorm;
+      document.getElementById('statTotal').textContent = '$' + total.toFixed(2);
+    }
+
     // ─── UI ───────────────────────────────────────────────────────────────────
     function updateUIStep2() {
       document.getElementById('fileName').textContent = currentFileName;
@@ -1212,12 +1379,24 @@
 
     function renderResultTable() {
       document.getElementById('resultBody').innerHTML = extractedData.map((r, i) => `
-        <tr style="animation-delay:${i*20}ms">
+        <tr data-index="${i}" style="animation-delay:${i*20}ms" class="${selectedRows.has(i) ? 'selected' : ''}">
+          <td>
+             <div class="checkbox-custom ${selectedRows.has(i) ? 'checked' : ''}" onclick="toggleRowSelection(${i})">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                </svg>
+             </div>
+          </td>
           <td class="font-mono" style="color:var(--accent)">${r.sku}</td>
           <td class="font-mono">${r.mfr}</td>
           <td class="font-mono">${r.qty}</td>
           <td class="truncate max-w-xs">${r.desc}</td>
           <td class="font-mono text-right">${r.cost}</td>
+          <td>
+             <button class="btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteSingleRow(${i})" title="Supprimer">
+                ✕
+             </button>
+          </td>
         </tr>`).join('');
     }
 
@@ -1249,7 +1428,7 @@
       downloadFile('SKU,Mfr. Part #,Qty,Description,Cost ($)\n' + rows.join('\n'), 'quote.csv', 'text/csv');
       showToast('CSV téléchargé !');
     }
-    // ── PURE JS ZIP BUILDER (no CDN needed) ─────────────────────────────────
+    // ── PURE JS ZIP BUILDER (no CDN needed) - CONSERVED ORIGINAL CODE ─────────────────────────────────
     // Builds a valid .xlsx (which is just a ZIP of XML files) with zero dependencies.
     function u8(str) {
       return new TextEncoder().encode(str);
@@ -1447,6 +1626,7 @@
       workbook = null;
       sheetNames = [];
       extractedData = [];
+      selectedRows.clear(); // Reset selection
       pasteArea.value = '';
       fileInput.value = '';
       goToStep(1);
